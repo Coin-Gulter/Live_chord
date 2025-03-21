@@ -26,14 +26,13 @@ This project is a web application that captures live microphone input, extracts 
     ```bash
     git clone https://github.com/Coin-Gulter/Live_chord.git
     cd live-chord
-    ```
+
 Serve the Project:
 
-Since the app uses AudioWorklet and WebAssembly, it must be served over HTTP/HTTPS. For example, using http-server:
+2. **Since the app uses AudioWorklet and WebAssembly, it must be served over HTTP/HTTPS. For example, using http-server:**
 
     ```bash
     python -m http.server
-    ```
 
 Then open your browser to the served URL (e.g., http://localhost:8080)
 
