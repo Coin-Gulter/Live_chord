@@ -26,26 +26,36 @@ function shiftHPCP(hpcp, shift = -1) {
   return shifted;
 }
 
-// Chord detection helpers
-
-// Generate a basic chord template vector for a major chord.
-function generateMajorTemplate(rootIndex) {
+// Generate a chord template vector for a given chord type.
+function generateChordTemplate(rootIndex, intervals) {
   const template = new Array(12).fill(0);
-  template[rootIndex % 12] = 1.0; // root
-  template[(rootIndex + 4) % 12] = 1.0; // major third
-  template[(rootIndex + 7) % 12] = 1.0; // perfect fifth
+  intervals.forEach(interval => {
+    template[(rootIndex + interval) % 12] = 1.0;
+  });
   return template;
 }
 
-// Generate chord templates for all 12 major chords.
+// Generate chord templates for all 12 roots and several chord types.
 function generateChordTemplates() {
   const noteNames = [
     "C", "C#", "D", "D#", "E", "F",
     "F#", "G", "G#", "A", "A#", "B"
   ];
+  const chordTypes = {
+    "maj": [0, 4, 7],
+    "min": [0, 3, 7],
+    "dim": [0, 3, 6],
+    "aug": [0, 4, 8],
+    "7": [0, 4, 7, 10],
+    // "maj7": [0, 4, 7, 11],
+    // "min7": [0, 3, 7, 10]
+  };
+
   const templates = {};
   for (let i = 0; i < 12; i++) {
-    templates[`${noteNames[i]}:maj`] = generateMajorTemplate(i);
+    for (const [type, intervals] of Object.entries(chordTypes)) {
+      templates[`${noteNames[i]}:${type}`] = generateChordTemplate(i, intervals);
+    }
   }
   return templates;
 }
@@ -75,7 +85,7 @@ function detectChord(hpcpVector, chordTemplates) {
 }
 
 // Extract and rank note strengths from the HPCP vector.
-function detectNotes(hpcpVector, threshold = 0.1) {
+function detectNotes(hpcpVector, threshold = 0.12) {
   const noteNames = [
     "C", "C#", "D", "D#", "E", "F",
     "F#", "G", "G#", "A", "A#", "B"
@@ -114,11 +124,9 @@ let sampleAccumulator = [];
 
 // Set up microphone input using AudioWorklet.
 async function startAudioWorkletStream() {
-  // Load Essentia.js scripts.
   await loadScript(ESSENTIA_WASM_URL);
   await loadScript(ESSENTIA_EXTRACTOR_URL);
 
-  // Create an AudioContext.
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   } catch (e) {
@@ -126,7 +134,6 @@ async function startAudioWorkletStream() {
     return;
   }
 
-  // Initialize EssentiaWASM and extractor.
   EssentiaWASM().then((essentiaWasmModule) => {
     essentiaExtractor = new EssentiaExtractor(essentiaWasmModule);
     essentiaExtractor.frameSize = BUFFER_SIZE;
@@ -134,7 +141,6 @@ async function startAudioWorkletStream() {
     essentiaExtractor.sampleRate = audioCtx.sampleRate;
   });
 
-  // Request microphone access.
   try {
     gumStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (e) {
@@ -142,10 +148,8 @@ async function startAudioWorkletStream() {
     return;
   }
 
-  // Create a media stream source from the microphone input.
   const micSource = audioCtx.createMediaStreamSource(gumStream);
 
-  // Load the AudioWorklet module.
   try {
     await audioCtx.audioWorklet.addModule("audio-processor.js");
   } catch (e) {
@@ -153,63 +157,46 @@ async function startAudioWorkletStream() {
     return;
   }
 
-  // Create an AudioWorkletNode.
   audioWorkletNode = new AudioWorkletNode(audioCtx, "audio-processor");
 
-  // Listen for audio data from the worklet.
   audioWorkletNode.port.onmessage = (event) => {
-    // Each event.data is a Float32Array (typically 128 samples).
     sampleAccumulator.push(event.data);
-
-    // If we've accumulated enough samples, process them.
     let totalSamples = sampleAccumulator.reduce((sum, arr) => sum + arr.length, 0);
     if (totalSamples >= BUFFER_SIZE) {
-      // Concatenate arrays to form one buffer.
       let buffer = new Float32Array(totalSamples);
       let offset = 0;
       for (const arr of sampleAccumulator) {
         buffer.set(arr, offset);
         offset += arr.length;
       }
-      // If we have more than BUFFER_SIZE samples, take only the first BUFFER_SIZE.
       if (buffer.length > BUFFER_SIZE) {
         buffer = buffer.subarray(0, BUFFER_SIZE);
       }
-      // Clear the accumulator.
       sampleAccumulator = [];
 
-      // Compute RMS to filter out low-volume segments.
       const rmsResult = essentiaExtractor.RMS(essentiaExtractor.arrayToVector(buffer));
       if (rmsResult.rms < 0.05) {
-        // If signal is too low, do nothing (last valid result remains).
         return;
       }
 
-      // Compute HPCP (chroma) features.
       let hpcp = essentiaExtractor.hpcpExtractor(buffer);
-      // Apply a downward shift of one semitone.
       hpcp = shiftHPCP(hpcp, -3);
 
-      // Accumulate HPCP vectors for smoothing.
       hpcpAccumulation.push(hpcp);
 
       const now = performance.now();
       if (now - lastSmoothingTime >= SMOOTHING_INTERVAL) {
-        // Average the accumulated HPCP vectors.
         const avgHPCP = hpcpAccumulation.reduce((acc, curr) => {
           return acc.map((val, i) => val + curr[i]);
         }, new Array(12).fill(0)).map(val => val / hpcpAccumulation.length);
 
-        // Reset accumulation and update last smoothing time.
         hpcpAccumulation = [];
         lastSmoothingTime = now;
 
-        // Detect chord and notes from the averaged HPCP.
         const detectedChord = detectChord(avgHPCP, chordTemplates);
         const detectedNotes = detectNotes(avgHPCP, 0.1);
         const topNotes = detectedNotes.map(n => `${n.note} (${n.value.toFixed(2)})`).join(", ");
 
-        // Save and update results.
         lastChordResult = detectedChord;
         lastNotesResult = topNotes;
         document.getElementById("chord-display").innerHTML =
@@ -218,17 +205,14 @@ async function startAudioWorkletStream() {
     }
   };
 
-  // Create a GainNode to mute audio output.
   gainNode = audioCtx.createGain();
   gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
 
-  // Connect nodes: micSource -> audioWorkletNode -> gainNode -> destination.
   micSource.connect(audioWorkletNode);
   audioWorkletNode.connect(gainNode);
   gainNode.connect(audioCtx.destination);
 }
 
-// Stop microphone and audio processing.
 function stopAudioWorkletStream() {
   if (gumStream) {
     gumStream.getAudioTracks().forEach(track => track.stop());
@@ -251,8 +235,7 @@ function stopAudioWorkletStream() {
   sampleAccumulator = [];
 }
 
-// Toggle recording on button click.
-document.getElementById("start-btn").addEventListener("click", function() {
+document.getElementById("start-btn").addEventListener("click", function () {
   if (!isRecording) {
     this.disabled = true;
     this.innerHTML = 'Initializing...';
