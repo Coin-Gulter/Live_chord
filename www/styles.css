@@ -1,0 +1,66 @@
+/* General Page Styles */
+body {
+    font-family: 'Arial', sans-serif;
+    background: #1e1e2e;
+    color: #fff;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+/* Container */
+.container {
+    background: #2b2d42;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 400px;
+}
+
+/* Title */
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+/* Start Button */
+#start-btn {
+    background: #ff6b6b;
+    border: none;
+    padding: 12px 20px;
+    font-size: 18px;
+    color: white;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.3s ease-in-out;
+}
+
+#start-btn:hover {
+    background: #ff4f4f;
+}
+
+/* Chord Display */
+#chord-display {
+    font-size: 22px;
+    font-weight: bold;
+    margin-top: 20px;
+    padding: 10px;
+    background: #3a3d5a;
+    border-radius: 8px;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Chord Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
